@@ -1,0 +1,16 @@
+.env
+.env*.local
+.env.production
+.env.development
+
+data/
+/.venv
+/data
+/__pycache__
+
+*.__pycache__
+*.pyc
+*.ipynb
+*.ipynb_checkpoints
+*.zip
+
