@@ -1,4 +1,4 @@
-from usb_4_mic_array.tuning import Tuning
+from custom_tuning import Tuning
 import usb.core
 import time
 
