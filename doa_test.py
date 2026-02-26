@@ -1,6 +1,5 @@
 from usb_4_mic_array.tuning import Tuning
 import usb.core
-import usb.util
 import time
 
 dev = usb.core.find(idVendor=0x2886, idProduct=0x0018)
