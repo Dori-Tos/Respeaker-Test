@@ -1,9 +1,9 @@
 from custom_tuning import Tuning
 import usb.core
-import pyaudio
 import numpy as np
 import math
 import sounddevice
+import time
 
 
 def get_gain(device_index=2):  # Card2 device 0
@@ -17,9 +17,7 @@ def get_gain(device_index=2):  # Card2 device 0
     # Audio parameters (Card2 device 0)
     RESPEAKER_RATE = 16000
     RESPEAKER_CHANNELS = 1
-    RESPEAKER_WIDTH = 2
     RESPEAKER_INDEX = device_index
-    CHUNK = 1024
     SAMPLE_DURATION = 0.5  # seconds to sample for level measurement
     
     # Create Tuning object to interact with the device
@@ -37,6 +35,9 @@ def get_gain(device_index=2):  # Card2 device 0
     # This prevents segmentation faults from simultaneous USB device access
     tuning.close()
     
+    # Give the device a moment to release the USB control interface
+    time.sleep(0.1)
+    
     print(f"AGC Gain (applied): {agc_gain:.2f} (dB: {agc_gain_db:.2f})")
     print(f"AGC Max Gain: {agc_max_gain:.2f}")
     print(f"AGC Desired Level: {agc_desired_level:.6f}")
@@ -46,28 +47,18 @@ def get_gain(device_index=2):  # Card2 device 0
     # Now measure the actual audio signal level
     print(f"\nSampling audio for {SAMPLE_DURATION}s to measure real signal level...")
     
-    p = pyaudio.PyAudio()
-    stream = p.open(
-        rate=RESPEAKER_RATE,
-        format=p.get_format_from_width(RESPEAKER_WIDTH),
+    # Use sounddevice instead of PyAudio (more reliable on Linux/RPi)
+    audio_data = sounddevice.rec(
+        int(SAMPLE_DURATION * RESPEAKER_RATE),
+        samplerate=RESPEAKER_RATE,
         channels=RESPEAKER_CHANNELS,
-        input=True,
-        input_device_index=RESPEAKER_INDEX,
+        dtype='int16',
+        device=RESPEAKER_INDEX
     )
+    sounddevice.wait()  # Wait for recording to complete
     
-    frames = []
-    num_chunks = int(RESPEAKER_RATE / CHUNK * SAMPLE_DURATION)
-    
-    for i in range(num_chunks):
-        data = stream.read(CHUNK, exception_on_overflow=False)
-        frames.append(data)
-    
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-    
-    # Convert to numpy array
-    audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
+    # Flatten the array if needed
+    audio_data = audio_data.flatten()
     
     # Calculate RMS (Root Mean Square) level
     rms = np.sqrt(np.mean(audio_data**2))
