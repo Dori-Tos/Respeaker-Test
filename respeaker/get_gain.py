@@ -93,4 +93,11 @@ def get_gain(device_index=1):  # Card2 device 0 Index 1
 if __name__ == '__main__':
     print("Reading gain and DOA from Respeaker 4 mic array...")
     print("-" * 50)
-    get_gain()  # Uses Card2 device 0 (index 1) by default
+    
+    with open('data/respeaker_gain_measurements.txt', 'w') as f:
+        gain_info = get_gain()
+        if gain_info:
+            f.write(f"Measurement {time.time()}:\n")
+            for key, value in gain_info.items():
+                f.write(f"  {key}: {value}\n")
+            f.write("\n")
