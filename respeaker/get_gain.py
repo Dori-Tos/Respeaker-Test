@@ -28,7 +28,10 @@ def get_gain(device_index=1):  # Card2 device 0 Index 1
     agc_gain = tuning.read('AGCGAIN')
     agc_gain_db = 20 * math.log10(agc_gain) if agc_gain and agc_gain > 0 else -float('inf')
     agc_max_gain = tuning.read('AGCMAXGAIN')
-    agc_desired_level = tuning.read('AGCDESIREDLEVEL')
+    agc_desired_level = tuning.read('AGCDESIREDLEVEL') 
+    # AGC Desired Level is typically a value between 0 and 1 representing the target signal level for the AGC to maintain
+    # Here it is setup at 0.005 (0.5% of full scale), which is a common setting for voice applications 
+    # In DBov (dB overload), this would be -23 dBov (-10 log10(0.005)), which is a standard target in industry
     doa_angle = tuning.direction
     voice_activity = tuning.is_voice
     
