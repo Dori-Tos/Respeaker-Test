@@ -39,11 +39,11 @@ def get_gain(device_index=1):  # Card2 device 0 Index 1
     # Give the device a moment to release the USB control interface
     time.sleep(0.1)
     
-    print(f"AGC Gain (applied): {agc_gain:.2f} (dB: {agc_gain_db:.2f})")
-    print(f"AGC Max Gain: {agc_max_gain:.2f}")
-    print(f"AGC Desired Level: {agc_desired_level:.6f}")
-    print(f"DOA Angle: {doa_angle}°")
-    print(f"Voice Activity: {'Yes' if voice_activity else 'No'}")
+    # print(f"AGC Gain (applied): {agc_gain:.2f} (dB: {agc_gain_db:.2f})")
+    # print(f"AGC Max Gain: {agc_max_gain:.2f}")
+    # print(f"AGC Desired Level: {agc_desired_level:.6f}")
+    # print(f"DOA Angle: {doa_angle}°")
+    # print(f"Voice Activity: {'Yes' if voice_activity else 'No'}")
     
     # Now measure the actual audio signal level
     print(f"\nSampling audio for {SAMPLE_DURATION}s to measure real signal level...")
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     print("Reading gain and DOA from Respeaker 4 mic array...")
     print("-" * 50)
     
-    with open('data/respeaker_gain_measurements.txt', 'w') as f:
+    with open('data/respeaker_gain_measurements.txt', 'a') as f:
         gain_info = get_gain()
         if gain_info:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
