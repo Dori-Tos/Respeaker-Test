@@ -105,6 +105,84 @@ def _close_xy_trace(angles: np.ndarray, values: np.ndarray) -> tuple[np.ndarray,
 	return np.concatenate([angles, angles[:1]]), np.concatenate([values, values[:1]])
 
 
+def _mirror_signed_seam(angles: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+	"""Mirror the signed seam so the 180° value also appears at -180° when needed.
+
+	This is only used for the right-hand cartesian plot.
+	"""
+	angles = np.asarray(angles, dtype=float)
+	values = np.asarray(values, dtype=float)
+	if angles.size == 0 or values.size == 0:
+		return angles, values
+
+	left_idx = np.where(np.isclose(angles, -180.0))[0]
+	right_idx = np.where(np.isclose(angles, 180.0))[0]
+	x_parts = [angles]
+	y_parts = [values]
+
+	if right_idx.size > 0 and left_idx.size == 0:
+		x_parts.insert(0, np.array([-180.0], dtype=float))
+		y_parts.insert(0, values[right_idx[-1] : right_idx[-1] + 1])
+	elif left_idx.size > 0 and right_idx.size == 0:
+		x_parts.append(np.array([180.0], dtype=float))
+		y_parts.append(values[left_idx[0] : left_idx[0] + 1])
+
+	return np.concatenate(x_parts), np.concatenate(y_parts)
+
+
+def _wrap_signed_angles(angles: np.ndarray) -> np.ndarray:
+	"""Wrap angles into the signed $[-180, 180)$ display range."""
+	angles = np.asarray(angles, dtype=float)
+	return ((angles + 180.0) % 360.0) - 180.0
+
+
+def _add_polar_cone_overlay(ax: plt.Axes, *, half_width_deg: float = 25.0,
+							cone_color: str = "tab:green", alpha: float = 0.12,
+							label: str = "focus region") -> None:
+	"""Draw a translucent cone centered on 0° that spans +/- half_width_deg.
+
+	The patch is rendered in polar data coordinates so it follows the current
+	theta configuration of the axis. It is intentionally subtle and sits behind
+	the measured curve.
+	"""
+	if half_width_deg <= 0:
+		return
+
+	r_min, r_max = ax.get_ylim()
+	if not np.isfinite(r_min) or not np.isfinite(r_max):
+		return
+	if r_max <= r_min:
+		return
+
+	theta = np.deg2rad(np.linspace(-float(half_width_deg), float(half_width_deg), 128))
+	ax.fill_between(
+		theta,
+		r_min,
+		r_max,
+		color=cone_color,
+		alpha=alpha,
+		zorder=0,
+		label=label,
+	)
+
+	# Add an in-plot tag so the highlighted region is named directly on the chart.
+	r_mid = r_min + 0.72 * (r_max - r_min)
+	ax.text(
+		np.deg2rad(0.0),
+		r_mid,
+		label,
+		ha="center",
+		va="center",
+		fontsize=10,
+		fontweight="bold",
+		color=cone_color,
+		bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor=cone_color, alpha=0.75),
+		zorder=3,
+	)
+	# Keep the overlay behind the data line and preserve the radial scale.
+	ax.set_ylim(r_min, r_max)
+
+
 def _prepare_series(paths: list[Path], freqs_hz: list[float | None] | None) -> list[_CsvSeries]:
 	if freqs_hz is not None and len(freqs_hz) != len(paths):
 		raise ValueError("--freqs must have the same count as CSV files")
@@ -129,6 +207,8 @@ def plot_gain_vs_angle(
 	doa_col: str | None = None,
 	split_plots: bool = False,
 	polar_min: float | None = None,
+	show_cone: bool = True,
+	cone_half_width_deg: float = 25.0,
 	title: str | None = None,
 	real_angles: list[float] | None = None,
 	save_path: Path | None = None,
@@ -154,7 +234,7 @@ def plot_gain_vs_angle(
 	if split_plots:
 		fig = plt.figure(figsize=(12, 5.5))
 		ax_gain = fig.add_subplot(1, 2, 1, projection="polar")
-		ax_doa = fig.add_subplot(1, 2, 2)
+		ax_error = fig.add_subplot(1, 2, 2)
 
 		# Close polar trace so 345->0 is connected visually. Use closed arrays
 		# so the polar plot wraps correctly.
@@ -213,55 +293,69 @@ def plot_gain_vs_angle(
 			pass  # Silently ignore if setting ticks fails
 		
 		ax_gain.grid(True, alpha=0.3)
+		if show_cone:
+			_add_polar_cone_overlay(
+				ax_gain,
+				half_width_deg=cone_half_width_deg,
+				cone_color="tab:green",
+				alpha=0.12,
+				label=f"Focus ±{cone_half_width_deg:g}°",
+			)
 
 		if doa is None or not np.isfinite(doa).any():
 			raise ValueError(
 				"split_plots=True requires a DOA column (expected 'doa_deg' by default)"
 			)
 
-		# For x-y: use evenly spaced x positions so spacing is constant, and
-		# place a duplicated marker for 0° at the new 360° position (not at 0).
-		n = len(angles)
-		x_pos = np.arange(n)
-		# Find 0° value (if present). We will add a duplicated 360° point at x_pos==n
-		zero_idx = None
-		for i, a in enumerate(angles):
-			if float(a) % 360.0 == 0.0:
-				zero_idx = i
-				break
-		if zero_idx is not None:
-			x_dup = n
-			y_dup = float(doa[zero_idx])
-			# Line plot across measured angles including the duplicated 360° point
-			x_line = np.concatenate([x_pos, [x_dup]])
-			y_line = np.concatenate([doa, [y_dup]])
-			ax_doa.plot(x_line, y_line, marker="o", linewidth=1.5, color="tab:orange", label="Estimated DOA")
-			# Plot real angles if provided as dotted reference line
-			if real_angles is not None and len(real_angles) == n:
-				real_closed = np.concatenate([real_angles, [real_angles[zero_idx]]])
-				ax_doa.plot(x_line, real_closed, linewidth=2.0, color="tab:green", linestyle="--", label="Ideal Performance")
-			# Build xticks: labels are measured angles with an extra 360° label at the end
-			tick_positions = list(x_pos) + [x_dup]
-			tick_labels = [str(int(a)) for a in angles] + ["360"]
-			ax_doa.set_xticks(tick_positions)
-			ax_doa.set_xticklabels(tick_labels)
+		# Cartesian summary: DOA error versus real angle.
+		# Keep the right-hand plot centered on 0° by wrapping only the angles
+		# above 180° into their negative counterparts for display.
+		if real_angles is not None and len(real_angles) == len(angles):
+			reference_angles = _wrap_signed_angles(np.asarray(real_angles, dtype=float))
+			ref_label = "Real angle (reference)"
 		else:
-			# No 0° measurement: simple evenly-spaced line/markers and angle ticks
-			ax_doa.plot(x_pos, doa, marker="o", linewidth=1.5, color="tab:orange", label="Estimated DOA")
-			# Plot real angles if provided as dotted reference line
-			if real_angles is not None and len(real_angles) == n:
-				ax_doa.plot(x_pos, real_angles, linewidth=2.0, color="tab:green", linestyle="--", label="Ideal Performance")
-			ax_doa.set_xticks(x_pos)
-			ax_doa.set_xticklabels([str(int(a)) for a in angles])
-		ax_doa.set_xlabel("Signal Angle (deg)")
-		ax_doa.set_ylabel("Estimated Angle (deg)")
-		ax_doa.set_title("DOA estimation vs Real Angle")
-		ax_doa.grid(True, alpha=0.3)
-		if real_angles is not None and len(real_angles) == n:
-			ax_doa.legend(loc="upper right")
-		# Set x-limits to cover all positions (including duplicated 360 marker)
-		ax_doa.set_xlim(-0.5, n + 0.5)
-		ax_doa.set_ylim(-30, 30)
+			reference_angles = _wrap_signed_angles(angles)
+			ref_label = "Measured angle (reference)"
+
+		error_angles_plot = _wrap_signed_angles(angles)
+		error_deg = doa - reference_angles
+		error_order = np.argsort(error_angles_plot)
+		error_angles_plot = error_angles_plot[error_order]
+		error_deg = error_deg[error_order]
+		error_angles_plot, error_deg_plot = _mirror_signed_seam(error_angles_plot, error_deg)
+		ax_error.axhline(0.0, color="0.35", linewidth=1.2, linestyle="--", zorder=1)
+		ax_error.axhspan(-5.0, 5.0, color="tab:green", alpha=0.10, zorder=0, label="±5° band")
+		ax_error.plot(error_angles_plot, error_deg_plot, marker="o", linewidth=1.8, color="tab:orange", label="DOA error")
+		ax_error.fill_between(error_angles_plot, 0.0, error_deg_plot, color="tab:orange", alpha=0.08)
+		ax_error.set_xlabel("Signal angle (deg)")
+		ax_error.set_ylabel("DOA error (deg)")
+		ax_error.set_title("DOA vs real angle error")
+		ax_error.grid(True, alpha=0.3)
+		# Add a small horizontal padding so points near the edges are visible.
+		pad_deg = 5.0
+		ax_error.set_xlim(-180.0 - pad_deg, 180.0 + pad_deg)
+		ax_error.set_xticks(np.arange(-180, 181, 45))
+		finite_error = error_deg_plot[np.isfinite(error_deg_plot)]
+		if finite_error.size:
+			# Compute an automatic ylim but enforce a minimum span of ±20° so
+			# small error datasets remain readable.
+			y_max = max(5.0, float(np.nanmax(np.abs(finite_error))) * 1.15, 20.0)
+		else:
+			# No finite values -> fall back to a sensible default range.
+			y_max = 20.0
+		ax_error.set_ylim(-y_max, y_max)
+		if ref_label:
+			ax_error.text(
+				0.02,
+				0.98,
+				ref_label,
+				transform=ax_error.transAxes,
+				va="top",
+				ha="left",
+				fontsize=9,
+				bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="0.75", alpha=0.85),
+			)
+		ax_error.legend(loc="upper right")
 		fig.suptitle(title or default_title)
 	else:
 		fig = plt.figure(figsize=(10, 5))
@@ -273,6 +367,11 @@ def plot_gain_vs_angle(
 		ax.set_title(title or default_title)
 		ax.grid(True, alpha=0.3)
 		ax.set_xlim(float(np.nanmin(angles)), float(np.nanmax(angles)))
+
+		if show_cone:
+			# In non-split mode the cone is mainly a visual reference on the x-axis plot.
+			# We only add it when the caller uses a polar-like display elsewhere.
+			pass
 
 		# Optional: visualize DOA estimate (if present).
 		if doa is not None:
@@ -406,6 +505,17 @@ def main(argv: list[str] | None = None) -> int:
 		help="In angle mode, show gain on a polar plot and DOA on a separate x-y plot",
 	)
 	parser.add_argument(
+		"--no-cone",
+		action="store_true",
+		help="Disable the translucent target cone overlay in angle mode",
+	)
+	parser.add_argument(
+		"--cone-half-width",
+		type=float,
+		default=25.0,
+		help="Half-width of the target cone overlay in degrees (default: 25)",
+	)
+	parser.add_argument(
 		"--real-angles",
 		type=str,
 		default=None,
@@ -466,6 +576,8 @@ def main(argv: list[str] | None = None) -> int:
 			split_plots=bool(args.split_plots),
 			title=args.title,
 			real_angles=real_angles,
+			show_cone=not args.no_cone,
+			cone_half_width_deg=float(args.cone_half_width),
 			save_path=out_path,
 			show=show,
 		)
