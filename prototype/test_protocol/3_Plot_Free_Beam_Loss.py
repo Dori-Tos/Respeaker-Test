@@ -33,6 +33,14 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
 
+PLOT_TITLE_SIZE = 16
+PLOT_LABEL_SIZE = 13
+PLOT_TICK_SIZE = 12
+PLOT_LEGEND_SIZE = 12
+PLOT_ANNOTATION_SIZE = 11
+PLOT_CONE_LABEL_SIZE = 13
+
+
 @dataclass(frozen=True)
 class _CsvSeries:
 	path: Path
@@ -173,7 +181,7 @@ def _add_polar_cone_overlay(ax: plt.Axes, *, half_width_deg: float = 25.0,
 		label,
 		ha="center",
 		va="center",
-		fontsize=10,
+		fontsize=PLOT_CONE_LABEL_SIZE,
 		fontweight="bold",
 		color=cone_color,
 		bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor=cone_color, alpha=0.75),
@@ -259,7 +267,7 @@ def plot_gain_vs_angle(
 					max_output_dbfs = float(np.nanmax(finite))
 					break
 		if max_output_dbfs is not None and np.isfinite(max_output_dbfs):
-			ax_gain.set_title(f"Gain (polar) [{max_output_dbfs:.1f} dBFS]")
+			ax_gain.set_title(f"Gain (polar) [{max_output_dbfs:.1f} dBFS]", fontsize=PLOT_TITLE_SIZE)
 		else:
 			# Fallback: show the maximum relative gain (dB) if dBFS isn't available
 			try:
@@ -267,13 +275,14 @@ def plot_gain_vs_angle(
 			except Exception:
 				max_rel_gain = None
 			if max_rel_gain is None or not np.isfinite(max_rel_gain):
-				ax_gain.set_title("Gain (polar)")
+				ax_gain.set_title("Gain (polar)", fontsize=PLOT_TITLE_SIZE)
 			else:
-				ax_gain.set_title(f"Gain (polar) [{max_rel_gain:.1f} dB]")
+				ax_gain.set_title(f"Gain (polar) [{max_rel_gain:.1f} dB]", fontsize=PLOT_TITLE_SIZE)
 		ax_gain.set_theta_zero_location("N")
 		ax_gain.set_theta_direction(-1)
 		ax_gain.grid(True, alpha=0.3)
 		ax_gain.set_rlabel_position(135)
+		ax_gain.tick_params(labelsize=PLOT_TICK_SIZE)
 		
 		# Set radial ticks to 5dB increments
 		try:
@@ -328,10 +337,11 @@ def plot_gain_vs_angle(
 		ax_error.axvspan(-float(cone_half_width_deg), float(cone_half_width_deg), color="tab:green", alpha=0.10, zorder=0, label=f"Focus Region ±{cone_half_width_deg:g}°")
 		ax_error.plot(error_angles_plot, error_deg_plot, marker="o", linewidth=1.8, color="tab:orange", label="DOA error")
 		ax_error.fill_between(error_angles_plot, 0.0, error_deg_plot, color="tab:orange", alpha=0.08)
-		ax_error.set_xlabel("Signal angle (deg)")
-		ax_error.set_ylabel("DOA error (deg)")
-		ax_error.set_title("DOA vs real angle error")
+		ax_error.set_xlabel("Signal angle (deg)", fontsize=PLOT_LABEL_SIZE)
+		ax_error.set_ylabel("DOA error (deg)", fontsize=PLOT_LABEL_SIZE)
+		ax_error.set_title("DOA vs real angle error", fontsize=PLOT_TITLE_SIZE)
 		ax_error.grid(True, alpha=0.3)
+		ax_error.tick_params(axis="both", labelsize=PLOT_TICK_SIZE)
 		# Add a small horizontal padding so points near the edges are visible.
 		pad_deg = 5.0
 		ax_error.set_xlim(-180.0 - pad_deg, 180.0 + pad_deg)
@@ -353,19 +363,19 @@ def plot_gain_vs_angle(
 				transform=ax_error.transAxes,
 				va="top",
 				ha="left",
-				fontsize=9,
+				fontsize=PLOT_ANNOTATION_SIZE,
 				bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="0.75", alpha=0.85),
 			)
-		ax_error.legend(loc="upper right")
-		fig.suptitle(title or default_title)
+		ax_error.legend(loc="upper right", fontsize=PLOT_LEGEND_SIZE)
+		fig.suptitle(title or default_title, fontsize=PLOT_TITLE_SIZE + 1)
 	else:
 		fig = plt.figure(figsize=(10, 5))
 		ax = fig.add_subplot(111)
 		ax.plot(angles, gains, marker="o", linewidth=2)
-		ax.set_xlabel("Signal Angle")
+		ax.set_xlabel("Signal Angle", fontsize=PLOT_LABEL_SIZE)
 		ax.set_xticks(angles, labels=angles.astype(int))
-		ax.set_ylabel("Gain (dB)")
-		ax.set_title(title or default_title)
+		ax.set_ylabel("Gain (dB)", fontsize=PLOT_LABEL_SIZE)
+		ax.set_title(title or default_title, fontsize=PLOT_TITLE_SIZE)
 		ax.grid(True, alpha=0.3)
 		ax.set_xlim(float(np.nanmin(angles)), float(np.nanmax(angles)))
 
