@@ -324,7 +324,8 @@ def plot_gain_vs_angle(
 		error_deg = error_deg[error_order]
 		error_angles_plot, error_deg_plot = _mirror_signed_seam(error_angles_plot, error_deg)
 		ax_error.axhline(0.0, color="0.35", linewidth=1.2, linestyle="--", zorder=1)
-		ax_error.axhspan(-5.0, 5.0, color="tab:green", alpha=0.10, zorder=0, label="±5° band")
+		# Highlight the focus region as a vertical band matching the polar cone.
+		ax_error.axvspan(-float(cone_half_width_deg), float(cone_half_width_deg), color="tab:green", alpha=0.10, zorder=0, label=f"Focus Region ±{cone_half_width_deg:g}°")
 		ax_error.plot(error_angles_plot, error_deg_plot, marker="o", linewidth=1.8, color="tab:orange", label="DOA error")
 		ax_error.fill_between(error_angles_plot, 0.0, error_deg_plot, color="tab:orange", alpha=0.08)
 		ax_error.set_xlabel("Signal angle (deg)")
